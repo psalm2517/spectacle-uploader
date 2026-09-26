@@ -3,9 +3,7 @@
 **Lightshot for KDE Spectacle, on your own domain.**
 
 Take a screenshot, click Share → *Upload to your server*, and a link like
-`https://shots.yourdomain.com/AbC123.png` is on your clipboard. No third-party
-image host, no account, no ads: the file goes to a server you control and the
-link stays yours.
+`https://shots.yourdomain.com/AbC123.png` is on your clipboard.
 
 It's a [KDE Purpose](https://invent.kde.org/frameworks/purpose) plugin, so it
 appears in Spectacle's Export → Share menu. It is a generic HTTP client: you
