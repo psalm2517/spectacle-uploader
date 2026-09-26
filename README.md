@@ -16,6 +16,28 @@ Single Python 3 file, standard library only. Tested on KDE Plasma 6 (Wayland).
 
 ## Install
 
+### 1. Requirements
+
+- KDE Plasma 6 with Spectacle 6 (it uses KDE's Purpose framework, normally installed alongside it)
+- Python 3 (standard library only, nothing to `pip install`)
+- Something to put the link on the clipboard. Without it the plugin shows the
+  link in a notification instead:
+  - Wayland: `wl-clipboard`
+  - X11: `xclip` or `xsel`
+- `notify-send` for notifications (usually already present)
+
+| Distro | Command |
+| --- | --- |
+| Debian / Ubuntu | `sudo apt install wl-clipboard xclip libnotify-bin` |
+| Fedora | `sudo dnf install wl-clipboard xclip libnotify` |
+| Arch | `sudo pacman -S wl-clipboard xclip libnotify` |
+| openSUSE | `sudo zypper install wl-clipboard xclip libnotify-tools` |
+
+(You only need the one that matches your session, `wl-clipboard` on Wayland or
+`xclip` on X11, but installing both is harmless.)
+
+### 2. Install the plugin
+
 ```sh
 git clone https://github.com/psalm2517/spectacle-uploader
 cd spectacle-uploader
@@ -23,29 +45,71 @@ cd spectacle-uploader
 ```
 
 This installs to `~/.local/share/kpackage/Purpose/spectacle-uploader/` and
-writes an example config to `~/.config/spectacle-uploader/config.json`.
-Restart Spectacle afterwards. Remove it with `./install.sh uninstall` (your
-config is kept).
+writes an example config to `~/.config/spectacle-uploader/config.json`. Remove
+it with `./install.sh uninstall` (your config is kept).
 
-To copy the link to the clipboard on Wayland you need `wl-clipboard`
-(`xclip` or `xsel` on X11). Without one, the link is shown as a notification.
+### 3. Point it at a server
+
+Edit `~/.config/spectacle-uploader/config.json` (see [Configure](#configure)
+and [Set up a server](#set-up-a-server)), then **restart Spectacle**.
+
+### 4. Use it
+
+Take a screenshot, click **Export**, then **Share**, then **Upload to your
+server**. The link is copied to your clipboard.
+
+## Set up a server
+
+The plugin needs somewhere to upload to. Any HTTP endpoint that accepts a file
+and tells you (or lets you work out) the resulting URL will do. Two options:
+
+**Use a server you already have.** Look at what it expects and copy the closest
+[recipe](#recipes) below. Servers that take a plain form upload or a
+raw `PUT`, with a fixed token or header for auth, fit one of them.
+
+**Run the included example server** ([`examples/server.py`](examples/server.py),
+about 90 lines, standard library only). It accepts authenticated uploads and
+serves the files publicly at `https://your-domain/f/<id>.<ext>`.
+
+1. Copy `examples/server.py` to your server and pick a secret token:
+   ```sh
+   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+2. Run it (keep it running with systemd, Docker, or whatever you prefer):
+   ```sh
+   UPLOAD_TOKEN=<that token> UPLOAD_DIR=/srv/uploads ./server.py
+   ```
+   It listens on `127.0.0.1:8080` only.
+3. Put a reverse proxy in front for HTTPS on your domain. With Caddy that is:
+   ```
+   files.yourdomain.com {
+       reverse_proxy 127.0.0.1:8080
+   }
+   ```
+   Point a DNS record for `files.yourdomain.com` at the server.
+4. Set the plugin config to match (this is what `config.example.json` is):
+   ```json
+   {
+     "url": "https://files.yourdomain.com/upload",
+     "method": "PUT",
+     "body": "raw",
+     "query": { "name": "{filename}" },
+     "headers": { "Authorization": "Bearer <that token>" },
+     "response": { "json_pointer": "/key" },
+     "link": "https://files.yourdomain.com/f/{value}"
+   }
+   ```
+
+Anyone with a link can view that file; only holders of the token can upload.
+The example server has no deletion, expiry or size accounting beyond a per-file
+limit (`MAX_MB`, default 50), so treat it as a starting point. If your server
+sits behind Cloudflare Access or another login layer, send its service
+credentials as `headers`.
 
 ## Configure
 
-Edit `~/.config/spectacle-uploader/config.json` (keep it `chmod 600`, it may
-hold credentials):
-
-```json
-{
-  "url": "https://files.example.com/api/upload",
-  "method": "PUT",
-  "body": "raw",
-  "query": { "name": "{filename}" },
-  "headers": { "Authorization": "Bearer YOUR_TOKEN" },
-  "response": { "json_pointer": "/key" },
-  "link": "https://files.example.com/f/{value}"
-}
-```
+Everything lives in `~/.config/spectacle-uploader/config.json`. Keep it
+`chmod 600`, it may hold credentials.
 
 | Key | Default | Meaning |
 | --- | --- | --- |

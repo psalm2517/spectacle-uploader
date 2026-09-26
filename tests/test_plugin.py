@@ -505,6 +505,44 @@ class PackagingTests(unittest.TestCase):
         self.assertIn(cfg["method"], ("POST", "PUT", "PATCH"))
         self.assertEqual(len([k for k in ("json_pointer", "regex", "text") if k in cfg["response"]]), 1)
         self.assertIn("example.com", cfg["url"])
+        self.assertNotIn("cloudflare", json.dumps(example).lower())
+
+
+class ExampleServerTests(PluginCase):
+    """The shipped example config and example server must work together."""
+
+    def test_example_config_against_example_server(self):
+        import urllib.request
+
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+        probe.close()
+        env = {**os.environ, "UPLOAD_TOKEN": "test-token", "UPLOAD_DIR": str(self.dir / "up"), "PORT": str(port)}
+        server = subprocess.Popen([str(ROOT / "examples" / "server.py")], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(server.wait)
+        self.addCleanup(server.terminate)
+        for _ in range(50):
+            try:
+                socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+                break
+            except OSError:
+                time.sleep(0.1)
+        cfg = json.loads((ROOT / "config.example.json").read_text())
+        cfg["url"] = f"http://127.0.0.1:{port}/upload"
+        cfg["link"] = f"http://127.0.0.1:{port}/f/{{value}}"
+        cfg["headers"] = {"Authorization": "Bearer test-token"}
+        self.write_config(cfg)
+        data = b"\x89PNG" + os.urandom(500)
+        result, _, _ = self.run_plugin(self.upload_payload(self.make_file("shot.png", data)))
+        link = result["output"]["url"]
+        self.assertTrue(link.endswith(".png"), result)
+        self.assertEqual(urllib.request.urlopen(link).read(), data)
+
+        cfg["headers"] = {"Authorization": "Bearer wrong"}
+        self.write_config(cfg)
+        result, _, _ = self.run_plugin(self.upload_payload(self.make_file("shot.png", data)))
+        self.assertIn("HTTP 401", result["errorText"])
 
 
 if __name__ == "__main__":

@@ -1,12 +1,9 @@
 {
-  "url": "https://cdn.example.com/api/upload",
+  "url": "https://files.example.com/upload",
   "method": "PUT",
   "body": "raw",
   "query": { "name": "{filename}" },
-  "headers": {
-    "CF-Access-Client-Id": "YOUR_CLIENT_ID.access",
-    "CF-Access-Client-Secret": "YOUR_CLIENT_SECRET"
-  },
+  "headers": { "Authorization": "Bearer YOUR_TOKEN" },
   "response": { "json_pointer": "/key" },
-  "link": "https://cdn.example.com/f/{value}"
+  "link": "https://files.example.com/f/{value}"
 }
