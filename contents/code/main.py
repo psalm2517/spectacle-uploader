@@ -465,6 +465,7 @@ def run_cli(mode, paths):
             shot = capture(mode, scratch)
             if shot is None:
                 log(f"{mode}: cancelled, nothing captured")
+                notify("No screenshot taken", "Spectacle closed without giving a screenshot (cancelled?)")
                 return 0
             files = [shot]
         links = upload_all(cfg, files, lambda p: None)

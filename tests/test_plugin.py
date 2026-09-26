@@ -594,10 +594,10 @@ class CommandLineTests(PluginCase):
         self.assertEqual(self.cli("region").returncode, 0)
         self.assertEqual(srv.requests, [])
 
-    def test_cancelled_capture_is_silent_and_uploads_nothing(self):
+    def test_cancelled_capture_uploads_nothing_and_says_so(self):
         srv = self.server(body=b"ok")
         self.write_config({"url": srv.url})
-        self.stub("notify-send", 'echo x > "$STUB_OUT"\n')
+        self.stub("notify-send", 'echo "$@" > "$STUB_OUT"\n')
         for code in (0, 1):
             with self.subTest(exit_code=code):
                 self.fake_spectacle(writes=False, code=code)
@@ -605,7 +605,7 @@ class CommandLineTests(PluginCase):
                 self.assertEqual(done.returncode, 0)
                 self.assertEqual(done.stderr, "")
         self.assertEqual(srv.requests, [])
-        self.assertFalse((self.dir / "stub-out").exists())
+        self.assertIn("No screenshot taken", (self.dir / "stub-out").read_text())
 
     def test_spectacle_crash_or_absence_is_an_error(self):
         srv = self.server(body=b"ok")
