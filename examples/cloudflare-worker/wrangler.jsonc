@@ -1,0 +1,9 @@
+{
+  "name": "shots",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-01",
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "shots-files" }],
+  "vars": { "MAX_MB": "90" },
+  // serve it on your own domain (the domain must be on your Cloudflare account):
+  "routes": [{ "pattern": "shots.example.com", "custom_domain": true }]
+}

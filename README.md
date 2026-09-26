@@ -102,9 +102,50 @@ serves the files publicly at `https://your-domain/f/<id>.<ext>`.
 
 Anyone with a link can view that file; only holders of the token can upload.
 The example server has no deletion, expiry or size accounting beyond a per-file
-limit (`MAX_MB`, default 50), so treat it as a starting point. If your server
-sits behind Cloudflare Access or another login layer, send its service
-credentials as `headers`.
+limit (`MAX_MB`, default 50), so treat it as a starting point.
+
+### Or use Cloudflare (Workers + R2, no server to run)
+
+If your domain is on Cloudflare you can host this without a machine of your
+own. [`examples/cloudflare-worker/`](examples/cloudflare-worker) is a small
+Worker that stores uploads in an R2 bucket and serves them on your domain, with
+the same API as the example server above. You need a Cloudflare account and
+Node.js.
+
+1. Edit `examples/cloudflare-worker/wrangler.jsonc` and change
+   `shots.example.com` to a hostname on your Cloudflare domain.
+2. Deploy it:
+   ```sh
+   cd examples/cloudflare-worker
+   npx wrangler r2 bucket create shots-files
+   npx wrangler deploy
+   ```
+3. Set the upload token (paste a long random string when asked, and keep a
+   copy for the plugin config):
+   ```sh
+   npx wrangler secret put UPLOAD_TOKEN
+   ```
+4. Use the same plugin config as above, with your hostname and that token.
+
+**Locking uploads behind Cloudflare Access instead of a shared token.** If you
+put the host behind [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/)
+(so a login page protects the whole site, not just uploads):
+
+1. Create a service token (Zero Trust → Access controls → Service credentials).
+2. On the Access application for your hostname, add a policy with action
+   **Service Auth** that includes that token.
+3. Add a second Access application for the path `f/*` on the same hostname with
+   a **Bypass** policy for everyone, so that shared links open without a login.
+   (The most specific path wins.)
+4. Send the token from the plugin:
+   ```json
+   "headers": {
+     "CF-Access-Client-Id": "YOUR_CLIENT_ID.access",
+     "CF-Access-Client-Secret": "YOUR_CLIENT_SECRET"
+   }
+   ```
+   Cloudflare rejects the default Python User-Agent with a 403 (error 1010);
+   this plugin sends its own, so no extra setup is needed.
 
 ## Configure
 
