@@ -109,6 +109,7 @@ class PluginCase(unittest.TestCase):
             "SPECTACLE_UPLOADER_CONFIG": str(self.dir / "config.json"),
             "STUB_OUT": str(self.dir / "stub-out"),
         }
+        self.stub("notify-send", "true\n")
 
     def stub(self, name, script):
         path = self.bin / name
@@ -319,6 +320,13 @@ class FailureTests(PluginCase):
                 text = self.failure(self.upload_payload(self.make_file("a.png", b"x")))
                 self.assertIn(f"HTTP {status}", text)
                 self.assertIn(expect, text)
+
+    def test_failure_raises_a_desktop_notification(self):
+        srv = self.server(status=500)
+        self.write_config({"url": srv.url})
+        self.stub("notify-send", 'echo "$@" > "$STUB_OUT"\n')
+        self.failure(self.upload_payload(self.make_file("a.png", b"x")))
+        self.assertIn("Upload failed", (self.dir / "stub-out").read_text())
 
     def test_unreachable_server(self):
         probe = socket.socket()

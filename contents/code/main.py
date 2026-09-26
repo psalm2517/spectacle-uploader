@@ -376,9 +376,11 @@ def run(sock):
         log(f"uploaded {len(links)} file(s)")
     except PluginError as exc:
         log(f"error: {exc}")
+        notify("Upload failed", str(exc))
         reporter.fail(str(exc))
     except Exception:
         log("unexpected error:\n" + traceback.format_exc())
+        notify("Upload failed", f"unexpected error, see {log_path()}")
         reporter.fail(f"unexpected error, see {log_path()}")
 
 
