@@ -176,7 +176,10 @@ Failures show a desktop notification. Details are in
 python3 -m unittest discover -s tests
 ```
 
+## AI disclosure
+
+This project was built with AI assistance, directed by me.
+
 ## License
 
-[Unlicense](LICENSE): public domain, do what you like. This is a small personal
-tool and is shared as is; contributions are not being sought.
+Unlicense. See [LICENSE](./LICENSE).
