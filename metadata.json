@@ -1,0 +1,12 @@
+{
+  "KPlugin": {
+    "Id": "spectacle-uploader",
+    "Name": "Upload to your server",
+    "Description": "Upload to a server you run and copy the link",
+    "Icon": "edit-paste",
+    "Category": "Utilities",
+    "License": "Unlicense"
+  },
+  "X-Purpose-ActionDisplay": "Upload to your server",
+  "X-Purpose-PluginTypes": ["Export"]
+}
