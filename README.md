@@ -101,6 +101,9 @@ serves the files publicly at `https://your-domain/f/<id>.<ext>`.
    ```
 
 Anyone with a link can view that file; only holders of the token can upload.
+The machine must be reachable from the internet on your domain (ports 80/443
+open). On a home connection that is often not possible; the Cloudflare option
+below needs no open ports.
 The example server has no deletion, expiry or size accounting beyond a per-file
 limit (`MAX_MB`, default 50), so treat it as a starting point.
 
