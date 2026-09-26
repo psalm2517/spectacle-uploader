@@ -132,26 +132,35 @@ limit (`MAX_MB`, default 50), so treat it as a starting point.
 
 ### Or use Cloudflare (Workers + R2, no server to run)
 
-If your domain is on Cloudflare you can host this without a machine of your
-own. [`examples/cloudflare-worker/`](examples/cloudflare-worker) is a small
-Worker that stores uploads in an R2 bucket and serves them on your domain, with
-the same API as the example server above. You need a Cloudflare account and
-Node.js.
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/psalm2517/spectacle-uploader/tree/main/examples/cloudflare-worker)
 
-1. Edit `examples/cloudflare-worker/wrangler.jsonc` and change
-   `shots.example.com` to a hostname on your Cloudflare domain.
-2. Deploy it:
-   ```sh
-   cd examples/cloudflare-worker
-   npx wrangler r2 bucket create shots-files
-   npx wrangler deploy
-   ```
-3. Set the upload token (paste a long random string when asked, and keep a
-   copy for the plugin config):
-   ```sh
-   npx wrangler secret put UPLOAD_TOKEN
-   ```
-4. Use the same plugin config as above, with your hostname and that token.
+[`examples/cloudflare-worker/`](examples/cloudflare-worker) is a small Worker
+that stores uploads in an R2 bucket and serves them at `/f/<id>`, with the same
+API as the example server above. It needs a Cloudflare account (R2 has to be
+enabled on it) and no server of your own.
+
+1. Click **Deploy to Cloudflare** above. It creates the R2 bucket and the Worker
+   in your account and asks you for `UPLOAD_TOKEN`: paste a long random string
+   (`openssl rand -base64 32`) and keep a copy for the plugin config.
+2. Your Worker is now live at `https://shots.<your-subdomain>.workers.dev`.
+   To use your own domain instead (the domain must be on your Cloudflare
+   account): Workers & Pages → `shots` → Settings → Domains & Routes → Add →
+   Custom domain, and enter e.g. `shots.yourdomain.com`.
+3. Use the same plugin config as above, with that hostname and your token.
+
+The button is untested by me end to end, since it needs a Cloudflare account.
+If you'd rather use the command line instead:
+
+```sh
+cd examples/cloudflare-worker
+npx wrangler r2 bucket create shots-files
+npx wrangler deploy
+npx wrangler secret put UPLOAD_TOKEN
+```
+
+To serve it on your own domain from the config file, add
+`"routes": [{ "pattern": "shots.yourdomain.com", "custom_domain": true }]` to
+`wrangler.jsonc` before deploying.
 
 **Locking uploads behind Cloudflare Access instead of a shared token.** If you
 put the host behind [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/)
