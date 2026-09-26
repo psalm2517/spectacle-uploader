@@ -5,6 +5,10 @@ Purpose starts this script with --server <unix socket>. It sends "<byte count>\\
 followed by a CBOR map ({"urls": [...], "mimeType": "..."}). We answer with JSON
 lines: {"percent": n}, {"output": {"url": "..."}} or {"error": 1, "errorText": "..."}.
 Purpose treats the process exiting as the end of the job.
+
+Run by hand it is also a command line tool (see main()): `region`, `screen`,
+`monitor`, `window` and `active` take a screenshot with Spectacle and upload it
+straight away, `upload FILE...` uploads existing files.
 """
 
 import argparse
@@ -17,6 +21,7 @@ import socket
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 import uuid
@@ -356,6 +361,14 @@ def notify(title, body):
         subprocess.run(["notify-send", "-a", APP, title, body], check=False, timeout=5)
 
 
+def upload_all(cfg, files, on_progress, mime=None):
+    links = []
+    for index, path in enumerate(files):
+        kind = mime or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        links.append(upload(cfg, path, kind, lambda p, index=index: on_progress((index * 100 + p) // len(files))))
+    return links
+
+
 def run(sock):
     reporter = Reporter(sock)
     try:
@@ -364,11 +377,7 @@ def run(sock):
         files = local_files(payload)
         single_mime = payload.get("mimeType") if len(files) == 1 else None
 
-        links = []
-        for index, path in enumerate(files):
-            mime = single_mime or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-            done, count = index, len(files)
-            links.append(upload(cfg, path, mime, lambda p, done=done, count=count: reporter.percent((done * 100 + p) // count)))
+        links = upload_all(cfg, files, reporter.percent, single_mime)
 
         joined = "\n".join(links)
         copied = cfg["copy"] and copy_to_clipboard(joined)
@@ -387,8 +396,71 @@ def run(sock):
         reporter.fail(f"unexpected error, see {log_path()}")
 
 
+CAPTURE_FLAGS = {"region": "-r", "screen": "-f", "monitor": "-m", "window": "-u", "active": "-a"}
+
+
+def capture(mode, directory):
+    """Take a screenshot with Spectacle; returns the file, or None if it was cancelled."""
+    if not shutil.which("spectacle"):
+        raise PluginError("spectacle is not installed (or not in PATH)")
+    target = Path(directory) / f"screenshot-{time.strftime('%Y%m%d-%H%M%S')}.png"
+    done = subprocess.run(["spectacle", "-b", "-n", CAPTURE_FLAGS[mode], "-o", str(target)], check=False)
+    if target.is_file() and target.stat().st_size > 0:
+        return target
+    if done.returncode not in (0, 1):
+        raise PluginError(f"spectacle failed (exit code {done.returncode})")
+    return None
+
+
+def run_cli(mode, paths):
+    """Capture (or take the given files) and upload, copying the link. Returns an exit code."""
+    scratch = None
+    try:
+        cfg = load_config()
+        if mode == "upload":
+            files = local_files({"urls": paths})
+        else:
+            scratch = tempfile.mkdtemp(prefix=f"{APP}-")
+            shot = capture(mode, scratch)
+            if shot is None:
+                log(f"{mode}: cancelled, nothing captured")
+                return 0
+            files = [shot]
+        links = upload_all(cfg, files, lambda p: None)
+        joined = "\n".join(links)
+        copied = cfg["copy"] and copy_to_clipboard(joined)
+        print(joined)
+        notify("Link copied" if copied else "Uploaded", joined)
+        log(f"uploaded {len(links)} file(s)")
+        return 0
+    except PluginError as exc:
+        log(f"error: {exc}")
+        print(f"error: {exc}", file=sys.stderr)
+        notify("Upload failed", str(exc))
+    except Exception:
+        log("unexpected error:\n" + traceback.format_exc())
+        print(f"unexpected error, see {log_path()}", file=sys.stderr)
+        notify("Upload failed", f"unexpected error, see {log_path()}")
+    finally:
+        if scratch:
+            shutil.rmtree(scratch, ignore_errors=True)
+    return 1
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="KDE Purpose plugin that uploads to your own server (started by Purpose)")
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and (argv[0] in CAPTURE_FLAGS or argv[0] == "upload"):
+        if argv[0] == "upload" and len(argv) < 2:
+            sys.exit("usage: spectacle-uploader upload FILE...")
+        if argv[0] != "upload" and len(argv) > 1:
+            sys.exit(f"usage: spectacle-uploader {argv[0]}")
+        return run_cli(argv[0], argv[1:])
+
+    parser = argparse.ArgumentParser(
+        description="Upload screenshots to your own server. Started by KDE Purpose as a Share-menu plugin; "
+        "or run: spectacle-uploader {region,screen,monitor,window,active} to capture and upload, "
+        "spectacle-uploader upload FILE... to upload files."
+    )
     parser.add_argument("--server", required=True, help="unix socket to talk to Purpose on")
     parser.add_argument("--pluginType")
     parser.add_argument("--pluginPath")

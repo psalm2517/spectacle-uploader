@@ -53,8 +53,33 @@ and [Set up a server](#set-up-a-server)), then **restart Spectacle**.
 
 ### 4. Use it
 
-Take a screenshot, click **Export**, then **Share**, then **Upload to your
-server**. The link is copied to your clipboard.
+**From Spectacle:** take a screenshot, click **Export**, then **Share**, then
+**Upload to your server**. The link is copied to your clipboard. Use this when
+you want to annotate the screenshot first.
+
+**With one key (the Lightshot way):** the installer also adds a
+`spectacle-uploader` command that takes the screenshot and uploads it in one
+step, with no Spectacle window in between:
+
+| Command | Captures |
+| --- | --- |
+| `spectacle-uploader region` | a rectangle you drag out |
+| `spectacle-uploader screen` | the whole desktop |
+| `spectacle-uploader monitor` | the monitor the cursor is on |
+| `spectacle-uploader window` | the window under the cursor |
+| `spectacle-uploader active` | the active window |
+| `spectacle-uploader upload FILE...` | existing files, no capture |
+
+The link is copied to the clipboard, printed, and shown in a notification.
+Cancelling a region selection does nothing. The screenshot is only kept in a
+temporary folder until it is uploaded.
+
+To bind it to a key in Plasma: System Settings → Keyboard → Shortcuts → Add New →
+Command or Script, set the command to
+`/home/YOU/.local/bin/spectacle-uploader region` (use the full path), then
+assign the key, for example Print Screen. Menu names may differ slightly between
+Plasma versions. If Print Screen is already taken by Spectacle, reassign that
+one first.
 
 ## Set up a server
 

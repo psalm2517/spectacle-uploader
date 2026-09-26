@@ -6,6 +6,7 @@ import os
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -474,6 +475,19 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(self.config.stat().st_mode & 0o777, 0o600)
         self.assertEqual(self.config.parent.stat().st_mode & 0o777, 0o700)
 
+    def test_command_symlink_is_installed_and_removed(self):
+        self.install()
+        link = self.home / ".local/bin/spectacle-uploader"
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(link.resolve(), (self.plugin_dir / "contents/code/main.py").resolve())
+        done = subprocess.run([str(link), "upload"], env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("usage: spectacle-uploader upload", done.stderr)
+        self.install()  # reinstalling over an existing link works
+        self.assertTrue(link.is_symlink())
+        self.install("uninstall")
+        self.assertFalse(link.exists() or link.is_symlink())
+
     def test_installed_plugin_runs_as_a_program(self):
         self.install()
         done = subprocess.run([str(self.plugin_dir / "contents/code/main.py"), "--help"], env=self.env, capture_output=True, text=True)
@@ -506,6 +520,109 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(len([k for k in ("json_pointer", "regex", "text") if k in cfg["response"]]), 1)
         self.assertIn("example.com", cfg["url"])
         self.assertNotIn("cloudflare", json.dumps(example).lower())
+
+
+class CommandLineTests(PluginCase):
+    """`spectacle-uploader region|screen|... ` and `upload FILE...`: the keyboard-shortcut workflow."""
+
+    def cli(self, *args):
+        return subprocess.run([str(MAIN), *args], env=self.env, capture_output=True, text=True, timeout=60)
+
+    def fake_spectacle(self, writes=True, code=0):
+        body = 'echo "$@" > "$STUB_OUT.args"\n'
+        if writes:
+            body += 'while [ $# -gt 0 ]; do [ "$1" = "-o" ] && out="$2"; shift; done\n'
+            body += 'printf "PNGDATA" > "$out"\necho "$out" > "$STUB_OUT.path"\n'
+        self.stub("spectacle", body + f"exit {code}\n")
+
+    def test_each_mode_captures_uploads_and_copies(self):
+        flags = {"region": "-r", "screen": "-f", "monitor": "-m", "window": "-u", "active": "-a"}
+        for mode, flag in flags.items():
+            with self.subTest(mode=mode):
+                srv = self.server(body=b"https://h/x")
+                self.write_config({"url": srv.url})
+                self.fake_spectacle()
+                self.stub("wl-copy", 'cat > "$STUB_OUT"\n')
+                done = self.cli(mode)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                args = (self.dir / "stub-out.args").read_text().split()
+                self.assertEqual(args[:3], ["-b", "-n", flag])
+                self.assertEqual(args[3], "-o")
+                self.assertEqual(done.stdout.strip(), "https://h/x")
+                self.assertEqual((self.dir / "stub-out").read_text(), "https://h/x")
+                self.assertIn(b"PNGDATA", srv.requests[0]["body"])
+                self.assertIn(b'filename="screenshot-', srv.requests[0]["body"])
+
+    def test_screenshot_is_not_left_on_disk(self):
+        srv = self.server(body=b"ok")
+        self.write_config({"url": srv.url})
+        self.fake_spectacle()
+        self.cli("region")
+        shot = Path((self.dir / "stub-out.path").read_text().strip())
+        self.assertFalse(shot.exists())
+        self.assertFalse(shot.parent.exists())
+
+    def test_cancelled_capture_is_silent_and_uploads_nothing(self):
+        srv = self.server(body=b"ok")
+        self.write_config({"url": srv.url})
+        self.stub("notify-send", 'echo x > "$STUB_OUT"\n')
+        for code in (0, 1):
+            with self.subTest(exit_code=code):
+                self.fake_spectacle(writes=False, code=code)
+                done = self.cli("region")
+                self.assertEqual(done.returncode, 0)
+                self.assertEqual(done.stderr, "")
+        self.assertEqual(srv.requests, [])
+        self.assertFalse((self.dir / "stub-out").exists())
+
+    def test_spectacle_crash_or_absence_is_an_error(self):
+        srv = self.server(body=b"ok")
+        self.write_config({"url": srv.url})
+        self.fake_spectacle(writes=False, code=139)
+        done = self.cli("region")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("spectacle failed", done.stderr)
+        (self.bin / "spectacle").unlink()
+        (self.bin / "python3").symlink_to(sys.executable)
+        self.env["PATH"] = str(self.bin)  # python, but no spectacle anywhere
+        done = self.cli("region")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("not installed", done.stderr)
+
+    def test_upload_existing_files(self):
+        srv = self.server(body=b"https://h/y")
+        self.write_config({"url": srv.url})
+        self.stub("wl-copy", 'cat > "$STUB_OUT"\n')
+        a, b = self.make_file("a.png", b"aaa"), self.make_file("b.txt", b"bbb")
+        done = self.cli("upload", str(a), str(b))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(len(srv.requests), 2)
+        self.assertEqual(done.stdout.split(), ["https://h/y", "https://h/y"])
+        self.assertIn(b'filename="b.txt"', srv.requests[1]["body"])
+        self.assertIn(b"Content-Type: text/plain", srv.requests[1]["body"])
+
+    def test_failures_exit_nonzero_and_notify(self):
+        srv = self.server(status=500)
+        self.write_config({"url": srv.url})
+        self.stub("notify-send", 'echo "$@" > "$STUB_OUT"\n')
+        done = self.cli("upload", str(self.make_file("a.png", b"x")))
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("HTTP 500", done.stderr)
+        self.assertIn("Upload failed", (self.dir / "stub-out").read_text())
+        done = self.cli("upload", str(self.dir / "missing.png"))
+        self.assertEqual(done.returncode, 1)
+
+    def test_missing_config_is_a_clear_error(self):
+        self.fake_spectacle()
+        done = self.cli("region")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("no config found", done.stderr)
+        self.assertFalse((self.dir / "stub-out.args").exists(), "should not even take a screenshot")
+
+    def test_usage_errors(self):
+        self.write_config({"url": "http://127.0.0.1:1"})
+        self.assertNotEqual(self.cli("upload").returncode, 0)
+        self.assertNotEqual(self.cli("region", "extra").returncode, 0)
 
 
 class ExampleServerTests(PluginCase):
