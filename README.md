@@ -1,5 +1,9 @@
 # Spectacle Uploader
 
+> **Superseded by [Lorgn](https://github.com/amandoti-win/lorgn)**, a fork of Spectacle that does this in one click.
+> This plugin still works with stock Spectacle, but it is no longer developed.
+
+
 **Lightshot for KDE Spectacle, on your own domain.**
 
 Take a screenshot, click Share → *Upload to your server*, and a link like
