@@ -208,6 +208,16 @@ class UploadTests(PluginCase):
         self.assertEqual(req["headers"]["content-length"], str(len(data)))
         self.assertEqual(req["body"], data)
 
+    def test_user_agent_is_ours_unless_configured(self):
+        srv = self.server(body=b"ok")
+        self.write_config({"url": srv.url})
+        shot = self.make_file("a.png", b"x")
+        self.run_plugin(self.upload_payload(shot))
+        self.assertTrue(srv.requests[0]["headers"]["user-agent"].startswith("spectacle-uploader/"))
+        self.write_config({"url": srv.url, "headers": {"user-agent": "mine/2"}})
+        self.run_plugin(self.upload_payload(shot))
+        self.assertEqual(srv.requests[1]["headers"]["user-agent"], "mine/2")
+
     def test_multipart_post_sends_a_proper_form_field(self):
         srv = self.server(body=b'{"data":{"url":"https://files.example/x.png"}}')
         self.write_config(

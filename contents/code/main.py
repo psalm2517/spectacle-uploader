@@ -295,6 +295,9 @@ def upload(cfg, path, mime, on_progress):
         query = {k: expand(str(v), variables) for k, v in cfg["query"].items()}
         url += ("&" if "?" in url else "?") + parse.urlencode(query)
     headers = {k: expand(str(v), variables) for k, v in cfg["headers"].items()}
+    if not any(k.lower() == "user-agent" for k in headers):
+        # the default Python-urllib agent is blocked outright by many Cloudflare-fronted servers
+        headers["User-Agent"] = f"{APP}/1.0"
     size = path.stat().st_size
 
     if cfg["body"] == "raw":
