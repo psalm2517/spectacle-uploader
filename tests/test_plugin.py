@@ -575,6 +575,16 @@ class CommandLineTests(PluginCase):
         self.assertEqual(done.stdout.strip(), "https://h/z")
         self.assertIn(b"PNG-from-clipboard", srv.requests[0]["body"])
 
+    def test_clipboard_image_that_vanishes_when_spectacle_exits_is_still_caught(self):
+        srv = self.server(body=b"https://h/w")
+        self.write_config({"url": srv.url})
+        self.stub("wl-paste", 'cat "$STUB_OUT.clip"\n')
+        (self.dir / "stub-out.clip").write_bytes(b"\x89PNG-old")
+        self.stub("spectacle", 'printf "\\211PNG-live" > "$STUB_OUT.clip"\nsleep 1\nprintf "" > "$STUB_OUT.clip"\n')
+        done = self.cli("region")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(b"PNG-live", srv.requests[0]["body"])
+
     def test_unchanged_clipboard_image_is_not_uploaded(self):
         srv = self.server(body=b"ok")
         self.write_config({"url": srv.url})

@@ -427,15 +427,28 @@ def capture(mode, directory):
         raise PluginError("spectacle is not installed (or not in PATH)")
     target = Path(directory) / f"screenshot-{time.strftime('%Y%m%d-%H%M%S')}.png"
     before = clipboard_image()
-    done = subprocess.run(["spectacle", "-b", "-n", CAPTURE_FLAGS[mode], "-o", str(target)], check=False)
+    started = time.monotonic()
+    proc = subprocess.Popen(["spectacle", "-b", "-n", CAPTURE_FLAGS[mode], "-o", str(target)])
+    # On Wayland the clipboard contents die with the process that owns them, so watch
+    # for the image while Spectacle is still running instead of after it exits.
+    seen = None
+    while proc.poll() is None:
+        time.sleep(0.3)
+        image = clipboard_image()
+        if image and image != before:
+            seen = image
+    code = proc.returncode
+    log(f"{mode}: spectacle exited {code} after {time.monotonic() - started:.1f}s, "
+        f"file={'yes' if target.is_file() else 'no'}, clipboard image={'new' if seen else 'none'}")
     if target.is_file() and target.stat().st_size > 0:
         return target
-    if done.returncode not in (0, 1):
-        raise PluginError(f"spectacle failed (exit code {done.returncode})")
-    after = clipboard_image()
-    if after and after != before:
-        target.write_bytes(after)
-        log(f"{mode}: no file from spectacle, used the image it put on the clipboard")
+    if code not in (0, 1):
+        raise PluginError(f"spectacle failed (exit code {code})")
+    if seen is None:
+        image = clipboard_image()
+        seen = image if image and image != before else None
+    if seen:
+        target.write_bytes(seen)
         return target
     return None
 
