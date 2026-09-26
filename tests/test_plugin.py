@@ -562,6 +562,28 @@ class CommandLineTests(PluginCase):
         self.assertFalse(shot.exists())
         self.assertFalse(shot.parent.exists())
 
+    def test_copy_button_in_the_overlay_still_uploads(self):
+        """Spectacle exits without a file but leaves a new image on the clipboard."""
+        srv = self.server(body=b"https://h/z")
+        self.write_config({"url": srv.url})
+        png = b"\x89PNG-from-clipboard"
+        self.stub("wl-paste", 'cat "$STUB_OUT.clip"\n')
+        (self.dir / "stub-out.clip").write_bytes(b"\x89PNG-old")
+        self.stub("spectacle", 'printf "\\211PNG-from-clipboard" > "$STUB_OUT.clip"\n')
+        done = self.cli("region")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.strip(), "https://h/z")
+        self.assertIn(b"PNG-from-clipboard", srv.requests[0]["body"])
+
+    def test_unchanged_clipboard_image_is_not_uploaded(self):
+        srv = self.server(body=b"ok")
+        self.write_config({"url": srv.url})
+        self.stub("wl-paste", 'cat "$STUB_OUT.clip"\n')
+        (self.dir / "stub-out.clip").write_bytes(b"\x89PNG-old")
+        self.fake_spectacle(writes=False)
+        self.assertEqual(self.cli("region").returncode, 0)
+        self.assertEqual(srv.requests, [])
+
     def test_cancelled_capture_is_silent_and_uploads_nothing(self):
         srv = self.server(body=b"ok")
         self.write_config({"url": srv.url})

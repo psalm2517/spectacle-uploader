@@ -399,16 +399,44 @@ def run(sock):
 CAPTURE_FLAGS = {"region": "-r", "screen": "-f", "monitor": "-m", "window": "-u", "active": "-a"}
 
 
+def clipboard_image():
+    """The image currently on the clipboard as PNG bytes, or None."""
+    commands = (
+        ["wl-paste", "--no-newline", "--type", "image/png"],
+        ["xclip", "-selection", "clipboard", "-t", "image/png", "-o"],
+    )
+    for command in commands:
+        if shutil.which(command[0]):
+            try:
+                done = subprocess.run(command, capture_output=True, timeout=5, check=True)
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if done.stdout.startswith(b"\x89PNG"):
+                return done.stdout
+    return None
+
+
 def capture(mode, directory):
-    """Take a screenshot with Spectacle; returns the file, or None if it was cancelled."""
+    """Take a screenshot with Spectacle; returns the file, or None if it was cancelled.
+
+    Spectacle's region overlay has its own Copy button, which puts the image on the
+    clipboard and exits without writing our file. If the clipboard changed while
+    Spectacle ran and now holds a new image, that is the screenshot the user took.
+    """
     if not shutil.which("spectacle"):
         raise PluginError("spectacle is not installed (or not in PATH)")
     target = Path(directory) / f"screenshot-{time.strftime('%Y%m%d-%H%M%S')}.png"
+    before = clipboard_image()
     done = subprocess.run(["spectacle", "-b", "-n", CAPTURE_FLAGS[mode], "-o", str(target)], check=False)
     if target.is_file() and target.stat().st_size > 0:
         return target
     if done.returncode not in (0, 1):
         raise PluginError(f"spectacle failed (exit code {done.returncode})")
+    after = clipboard_image()
+    if after and after != before:
+        target.write_bytes(after)
+        log(f"{mode}: no file from spectacle, used the image it put on the clipboard")
+        return target
     return None
 
 
