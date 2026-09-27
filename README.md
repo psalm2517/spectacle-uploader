@@ -1,6 +1,6 @@
 # Spectacle Uploader
 
-> **Superseded by [Lorgn](https://github.com/amandoti-win/lorgn)**, a fork of Spectacle that does this in one click.
+> **Superseded by [Loren](https://github.com/amandoti-win/loren)**, a fork of Spectacle that does this in one click.
 > This plugin still works with stock Spectacle, but it is no longer developed.
 
 
